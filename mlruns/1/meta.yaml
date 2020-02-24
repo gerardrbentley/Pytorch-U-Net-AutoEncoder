@@ -1,0 +1,4 @@
+artifact_location: file:///home/gerardbentley/autoencoder/mlruns/1
+experiment_id: '1'
+lifecycle_stage: active
+name: autoencodertrial
