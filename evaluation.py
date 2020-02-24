@@ -1,17 +1,19 @@
 
 import torch
 import torchvision
+import mlflow
 
 import input_target_transforms as TT
 import distributed_utils
 
+from faim_mlflow import get_run_manager
 from datasets import get_dataset
 from visualize import argmax_to_rgb
 from ml_args import parse_args
 from models import UNetAuto
 
 
-def evaluate(model, criterion, data_loader, device, print_freq, epoch=0, writer=None, post_visualize=False):
+def evaluate(model, criterion, data_loader, device, print_freq, epoch=0, do_logging=False, post_visualize=False):
     model.eval()
     metric_logger = distributed_utils.MetricLogger(delimiter="  ")
     header = 'Test:'
@@ -33,26 +35,26 @@ def evaluate(model, criterion, data_loader, device, print_freq, epoch=0, writer=
             loss_item = total_loss.item()
             metric_logger.update(total_loss=loss_item)
 
-            if writer is not None:
-                writer.add_scalar('Loss_Total/Validation',
+            if do_logging:
+                mlflow.add_metric('Loss_Total/Validation',
                                   loss_item, global_step=step)
 
                 # TODO: write function to visualize mask and output in eval loop
-                if i < 5:
-                    input_images = [image, target]
-                    img_grid = torchvision.utils.make_grid(
-                        torch.cat(input_images), nrow=2, normalize=True)
-                    writer.add_image(
-                        f'Validation_Sample_{i}/Input_And_Target', img_grid, global_step=step)
+                # if i < 5:
+                #     input_images = [image, target]
+                #     img_grid = torchvision.utils.make_grid(
+                #         torch.cat(input_images), nrow=2, normalize=True)
+                #     writer.add_image(
+                #         f'Validation_Sample_{i}/Input_And_Target', img_grid, global_step=step)
 
-                    reconstruction = TT.img_norm(reconstruction)
-                    writer.add_image(
-                        f'Validation_Sample_{i}/AE_Reconstruction', reconstruction, global_step=step)
+                #     reconstruction = TT.img_norm(reconstruction)
+                #     writer.add_image(
+                #         f'Validation_Sample_{i}/AE_Reconstruction', reconstruction, global_step=step)
 
-                    if post_visualize:
-                        inputs.append(image)
-                        targets.append(target)
-                        reconstructions.append(reconstruction)
+                #     if post_visualize:
+                #         inputs.append(image)
+                #         targets.append(target)
+                #         reconstructions.append(reconstruction)
 
         if post_visualize:
             from visualize import visualize_outputs
@@ -114,17 +116,15 @@ def main(args):
         checkpoint = torch.load(args.checkpoint, map_location='cpu')
         model.load_state_dict(checkpoint['model'])
 
-    # Don't log to tensorboard if flag not to or distributed training and not master thread
-    if args.no_tensorboard or ('rank' in args and args.rank != 0):
-        writer = None
-    else:
-        from faim_tensorboard import get_faim_writer
-        writer = get_faim_writer(args)
-
-    eval_result = evaluate(model, nn.MSELoss(), data_loader_test, device,
-                           1, epoch=0, writer=writer, post_visualize=args.do_visualize)
-    print(eval_result)
-    return
+    # Don't log to mlflow on distributed training and not master thread
+    if ('rank' in args and args.rank != 0):
+        args.log_mlflow = False
+    run_manager = get_run_manager(args)
+    with run_manager as run:
+        eval_result = evaluate(model, nn.MSELoss(), data_loader_test, device,
+                            1, epoch=0, writer=writer, post_visualize=args.do_visualize)
+        print(eval_result)
+    return 1
 
 
 if __name__ == "__main__":

@@ -7,9 +7,13 @@ import torch
 from torch import nn
 import torchvision
 
+import mlflow
+import mlflow.pytorch
+
 import input_target_transforms as TT
 import distributed_utils
 
+from faim_mlflow import get_run_manager
 from ml_args import parse_args
 from evaluation import evaluate
 from models import UNetAuto
@@ -20,7 +24,7 @@ from datasets import GameImagesDataset, GameFoldersDataset, OverfitDataset, get_
 # Reference Training Script and Utils: https://github.com/pytorch/vision/tree/master/references
 
 
-def train_one_epoch(model, criterion, data_loader, device, optimizer, lr_scheduler, epoch, print_freq, writer=None):
+def train_one_epoch(model, criterion, data_loader, device, optimizer, lr_scheduler, epoch, print_freq, do_logging=False):
     model.train()
     metric_logger = distributed_utils.MetricLogger(delimiter="  ")
     metric_logger.add_meter(
@@ -42,10 +46,10 @@ def train_one_epoch(model, criterion, data_loader, device, optimizer, lr_schedul
         lr_scheduler.step()
         metric_logger.update(total_loss=total_loss.item(),
                              lr=optimizer.param_groups[0]["lr"])
-        if writer is not None and i % print_freq == 0:
-            writer.add_scalar('Loss_Sum/Training',
+        if do_logging and i % print_freq == 0:
+            mlflow.log_metric('Loss_Sum/Training',
                               total_loss.item(), global_step=step)
-            writer.add_scalar(
+            mlflow.log_metric(
                 'Learning_Rate', optimizer.param_groups[0]["lr"], global_step=step)
 
 
@@ -94,7 +98,7 @@ def main(args):
         pin_memory=True)
 
     # Initialize Model, handling distributed as needed
-    model = UNetAuto()
+    model = UNetAuto(max_features=512)
     model.to(device)
     if args.distributed:
         model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model)
@@ -110,26 +114,19 @@ def main(args):
             model, device_ids=[args.gpu])
         model_without_ddp = model.module
 
-    # Don't log to tensorboard on distributed training and not master thread
-    if args.tensorboard == '' or ('rank' in args and args.rank != 0):
-        writer = None
-    else:
-        from torch.utils.tensorboard import SummaryWriter
-        writer = SummaryWriter(args.tensorboard)
+    # Add a training image and it's target to tensorboard
+    # rand_select = torch.randint(0, len(dataset), (6,)).tolist()
+    # train_images = []
+    # for idx in rand_select:
+    #     data = dataset[idx]
+    #     image, target = data['image'], data['target']
 
-        # Add a training image and it's target to tensorboard
-        rand_select = torch.randint(0, len(dataset), (6,)).tolist()
-        train_images = []
-        for idx in rand_select:
-            data = dataset[idx]
-            image, target = data['image'], data['target']
+    #     train_images.append(image)
+    #     train_images.append(target)
 
-            train_images.append(image)
-            train_images.append(target)
-
-        img_grid = torchvision.utils.make_grid(
-            train_images, nrow=6, normalize=True)
-        writer.add_image('Random_Train_Sample', img_grid)
+    # img_grid = torchvision.utils.make_grid(
+    #     train_images, nrow=6, normalize=True)
+    # writer.add_image('Random_Train_Sample', img_grid)
 
     # Same functionality available using evaluation.py
     if args.test_only:
@@ -158,66 +155,64 @@ def main(args):
         optimizer,
         lambda x: (1 - x / (len(data_loader) * args.epochs)) ** 0.9)
 
-    start_time = time.time()
-    for epoch in range(args.epochs):
-        visualize_flag = (args.do_visualize and epoch == (args.epochs-1))
+    # Don't log to mlflow on distributed training and not master thread
+    if ('rank' in args and args.rank != 0):
+        args.log_mlflow = False
+    run_manager = get_run_manager(args)
 
-        if args.distributed:
-            train_sampler.set_epoch(epoch)
-        train_one_epoch(model, loss_fn, data_loader, device,
-                        optimizer, lr_scheduler, epoch, args.print_freq, writer)
-        if data_loader_test is not None:
-            result_metric_logger = evaluate(
-                model, loss_fn, data_loader_test, device, args.print_freq, epoch, writer, post_visualize=visualize_flag)
-        else:
-            result_metric_logger = None
+    with run_manager as run:
+        start_time = time.time()
+        for epoch in range(args.epochs):
+            visualize_flag = (args.do_visualize and epoch == (args.epochs-1))
 
-        distributed_utils.save_on_master(
-            {
-                'model': model_without_ddp.state_dict(),
-                'optimizer': optimizer.state_dict(),
-                'epoch': epoch,
-                'args': args
-            },
-            os.path.join(args.output_dir, 'model_{}.pth'.format(epoch)))
+            if args.distributed:
+                train_sampler.set_epoch(epoch)
+            train_one_epoch(model, loss_fn, data_loader, device,
+                            optimizer, lr_scheduler, epoch, args.print_freq, args.log_mlflow)
+            if data_loader_test is not None:
+                result_metric_logger = evaluate(
+                    model, loss_fn, data_loader_test, device, args.print_freq, epoch, args.log_mlflow, post_visualize=visualize_flag)
+            else:
+                result_metric_logger = None
 
-    total_time = time.time() - start_time
-    total_time_str = str(datetime.timedelta(seconds=int(total_time)))
+            distributed_utils.save_on_master(
+                {
+                    'model': model_without_ddp.state_dict(),
+                    'optimizer': optimizer.state_dict(),
+                    'epoch': epoch,
+                    'args': args
+                },
+                os.path.join(args.output_dir, 'model_{}.pth'.format(epoch)))
 
-    print('Training time {}'.format(total_time_str))
-    world = args.world_size if 'rank' in args else 0
+        total_time = time.time() - start_time
+        total_time_str = str(datetime.timedelta(seconds=int(total_time)))
 
-    param_dict = {
-        'hparam/epochs': args.epochs,
-        'hparam/num_samples': len(dataset),
-        'hparam/batch_size': args.batch_size,
-        'hparam/lr_start': args.lr,
-        'hparam/momentum': args.momentum,
-        'hparam/weight_decay': args.weight_decay,
-        'hparam/distributed': int(args.distributed),
-        'hparam/world_size': world,
-    }
-    if result_metric_logger is not None:
-        result_dict = {
-            'results/total_loss': getattr(result_metric_logger, "total_loss").value,
-            'results/soft_cut_loss': getattr(result_metric_logger, "soft_cut_loss").value,
-            'results/reconstr_loss': getattr(result_metric_logger, "reconstr_loss").value,
-            'results/smooth_loss': getattr(result_metric_logger, "smooth_loss").value,
+        print('Training time {}'.format(total_time_str))
+        world = args.world_size if 'rank' in args else 0
+
+        param_dict = {
+            'hparam/epochs': args.epochs,
+            'hparam/num_samples': len(dataset),
+            'hparam/batch_size': args.batch_size,
+            'hparam/lr_start': args.lr,
+            'hparam/momentum': args.momentum,
+            'hparam/weight_decay': args.weight_decay,
+            'hparam/distributed': int(args.distributed),
+            'hparam/world_size': world,
         }
-    else:
-        result_dict = {}
-    print(json.dumps(param_dict, indent=2, sort_keys=True))
-    print(json.dumps(result_dict, indent=2, sort_keys=True))
-    if writer is not None:
+        if result_metric_logger is not None:
+            result_dict = {
+                'results/total_loss': getattr(result_metric_logger, "total_loss").value,
+                'results/train_time': total_time_str
+            }
+        else:
+            result_dict = {}
+        print(json.dumps(param_dict, indent=2, sort_keys=True))
+        print(json.dumps(result_dict, indent=2, sort_keys=True))
+        if args.log_mlflow:
 
-        # TODO: look into tensorboard hyperparams. Seems cool but adds another trace file and doesn't seem to be searchable by run
-        # writer.add_hparams(param_dict, result_dict)
-        writer.add_text('Training/Parameters',
-                        json.dumps(param_dict, indent=2, sort_keys=True))
-        writer.add_text('Training/Results',
-                        json.dumps(result_dict, indent=2, sort_keys=True))
-        writer.add_text('End', f'Total Time to Train: {total_time_str}')
-        writer.close()
+            mlflow.log_params(param_dict)
+            mlflow.log_metrics(result_dict)
 
 
 if __name__ == "__main__":

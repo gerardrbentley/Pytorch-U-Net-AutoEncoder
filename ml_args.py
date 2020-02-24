@@ -3,7 +3,7 @@ import argparse
 
 def parse_args():
     parser = argparse.ArgumentParser(
-        description='Unsupervised Game Segmentation Training')
+        description='Game Image AutoEncoder Training')
 
     # Data and Model
     parser.add_argument('-d', '--dataset', default='overfit', help='dataset')
@@ -29,10 +29,10 @@ def parse_args():
                         type=int, help='print frequency')
     parser.add_argument('-o', '--output-dir',
                         default='./output/', help='path where to save')
-    parser.add_argument('-t', '--tensorboard', default='',
-                        help='project name to save tensorboard output')
+    parser.add_argument('-exp', '--experiment', default='autoencodertrial',
+                        help='experiment name to save mlflow output')
     parser.add_argument('-c', '--comment', default='',
-                        help='extra comment for tensorboard file name')
+                        help='extra comment for mlflow artiffacts')
     parser.add_argument('-cp', '--checkpoint', default='',
                         help='resume from checkpoint')
 
@@ -50,9 +50,9 @@ def parse_args():
         action="store_true",
     )
     parser.add_argument(
-        "--log-tensorboard",
-        dest="log_tensorboard",
-        help="Don't record training to tensorboard",
+        "--log-mlflow",
+        dest="log_mlflow",
+        help="Record training to mlflow",
         action="store_true",
     )
     parser.add_argument(
