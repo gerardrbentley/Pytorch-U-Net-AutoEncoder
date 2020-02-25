@@ -1,3 +1,4 @@
+import tempfile
 
 import torch
 import torchvision
@@ -8,12 +9,11 @@ import distributed_utils
 
 from faim_mlflow import get_run_manager
 from datasets import get_dataset
-from visualize import argmax_to_rgb
 from ml_args import parse_args
 from models import UNetAuto
 
 
-def evaluate(model, criterion, data_loader, device, print_freq, epoch=0, do_logging=False, post_visualize=False):
+def evaluate(model, criterion, data_loader, device, print_freq, start_step=0, do_logging=False, post_visualize=False):
     model.eval()
     metric_logger = distributed_utils.MetricLogger(delimiter="  ")
     header = 'Test:'
@@ -25,7 +25,7 @@ def evaluate(model, criterion, data_loader, device, print_freq, epoch=0, do_logg
             reconstructions = []
         for data, i in metric_logger.log_every(data_loader, print_freq, header):
 
-            step = epoch * len(data_loader.dataset) + i
+            step = start_step + i
 
             image, target = data['image'], data['target']
             image, target = image.to(device), target.to(device)
@@ -36,25 +36,28 @@ def evaluate(model, criterion, data_loader, device, print_freq, epoch=0, do_logg
             metric_logger.update(total_loss=loss_item)
 
             if do_logging:
-                mlflow.add_metric('Loss_Total/Validation',
-                                  loss_item, global_step=step)
-
+                mlflow.log_metric('Loss_Total/Validation',
+                                  loss_item, step=step)
+                
                 # TODO: write function to visualize mask and output in eval loop
-                # if i < 5:
-                #     input_images = [image, target]
-                #     img_grid = torchvision.utils.make_grid(
-                #         torch.cat(input_images), nrow=2, normalize=True)
-                #     writer.add_image(
-                #         f'Validation_Sample_{i}/Input_And_Target', img_grid, global_step=step)
+                if i < 5:
+                    reconstruction = TT.img_norm(output)
+                    training_images = [image, target, reconstruction]
 
-                #     reconstruction = TT.img_norm(reconstruction)
-                #     writer.add_image(
-                #         f'Validation_Sample_{i}/AE_Reconstruction', reconstruction, global_step=step)
+                    img_grid = torchvision.utils.make_grid(
+                        torch.cat(training_images), nrow=3, normalize=True)
+                    # print(img_grid.shape, reconstruction.shape)
+                    pil_input, _ = TT.ToPIL()(img_grid.cpu(), img_grid.cpu())
 
-                #     if post_visualize:
-                #         inputs.append(image)
-                #         targets.append(target)
-                #         reconstructions.append(reconstruction)
+                    filename = f"globalstep_{step:05d}_image_{i}_"
+                    with tempfile.NamedTemporaryFile(prefix=filename,suffix='.png') as filepath:
+                        pil_input.save(filepath)
+                        mlflow.log_artifact(filepath.name, 'eval_images')
+
+                    if post_visualize:
+                        inputs.append(image)
+                        targets.append(target)
+                        reconstructions.append(reconstruction)
 
         if post_visualize:
             from visualize import visualize_outputs

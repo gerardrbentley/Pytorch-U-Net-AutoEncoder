@@ -6,7 +6,6 @@ import os
 import torch
 
 import input_target_transforms as TT
-from visualize import visualize_outputs
 
 # Expects directory of .png's as root
 # Transforms should include ToTensor (also probably Normalize)
@@ -95,6 +94,8 @@ def get_dataset(name, train_or_val, transform):
 
 
 if __name__ == "__main__":
+    from visualize import visualize_outputs
+
     print('test Game Image Dataset')
 
     trainset = GameImagesDataset(root='/faim/datasets/mario_images', train_or_val='train', transform=None)
