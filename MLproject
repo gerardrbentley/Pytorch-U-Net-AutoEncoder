@@ -1,0 +1,32 @@
+name: Game Auto Encoder Trials
+
+conda_env: mlenv.yml
+# Can have a docker_env instead of a conda_env, e.g.
+# docker_env:
+#    image:  mlflow-docker-example
+
+entry_points:
+  main:
+    parameters:
+      model: {type: string, default: "unet512"}
+      dataset: {type: string, default: "overfit"}
+      batch_size: {type: float, default: 32}
+      epochs: {type: float, default: 10}
+      lr_start: {type: float, default: 0.01}
+      momentum: {type: float, default: 0.9}
+      weight_decay: {type: float, default: 0.0001}
+      output: {type: path, default: "./outputs"}
+      experiment: {type: string, default: "autoencoder"}
+    command: "python train.py -m {model} -d {dataset} -b {batch_size} -e {epochs} --lr {lr_start} -mo {momentum} -wd {weight_decay} -o {output} -exp {experiment} -log"
+  noaug:
+    parameters:
+      model: {type: string, default: "unet512"}
+      dataset: {type: string, default: "overfit"}
+      batch_size: {type: float, default: 32}
+      epochs: {type: float, default: 10}
+      lr_start: {type: float, default: 0.01}
+      momentum: {type: float, default: 0.9}
+      weight_decay: {type: float, default: 0.0001}
+      output: {type: path, default: "./outputs"}
+      experiment: {type: string, default: "autoencoder"}
+    command: "CUDA_VISIBLE_DEVICES=2 python train.py --no-aug -m {model} -d {dataset} -b {batch_size} -e {epochs} --lr {lr_start} -mo {momentum} -wd {weight_decay} -o {output} -exp {experiment} -log"

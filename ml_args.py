@@ -3,11 +3,11 @@ import argparse
 
 def parse_args():
     parser = argparse.ArgumentParser(
-        description='Unsupervised Game Segmentation Training')
+        description='Game Image AutoEncoder Training')
 
     # Data and Model
     parser.add_argument('-d', '--dataset', default='overfit', help='dataset')
-    parser.add_argument('-m', '--model', default='wnet', help='model')
+    parser.add_argument('-m', '--model', default='unet512', help='model')
     parser.add_argument('--device', default='cuda', help='device')
     parser.add_argument('-j', '--workers', default=16, type=int, metavar='N',
                         help='number of data loading workers (default: 16)')
@@ -16,11 +16,11 @@ def parse_args():
     parser.add_argument('-b', '--batch-size', default=8, type=int)
     parser.add_argument('-e', '--epochs', default=5, type=int, metavar='N',
                         help='number of total epochs to run')
-    parser.add_argument('--lr', default=0.01, type=float,
+    parser.add_argument('-lr', '--lr', default=0.01, type=float,
                         help='initial learning rate')
     parser.add_argument('-mo', '--momentum', default=0.9, type=float, metavar='M',
                         help='momentum')
-    parser.add_argument('--wd', '--weight-decay', default=1e-4, type=float,
+    parser.add_argument('-wd', '--weight-decay', default=1e-4, type=float,
                         metavar='W', help='weight decay (default: 1e-4)',
                         dest='weight_decay')
 
@@ -29,10 +29,10 @@ def parse_args():
                         type=int, help='print frequency')
     parser.add_argument('-o', '--output-dir',
                         default='./output/', help='path where to save')
-    parser.add_argument('-t', '--tensorboard', default='',
-                        help='project name to save tensorboard output')
+    parser.add_argument('-exp', '--experiment', default='autoencodertrial',
+                        help='experiment name to save mlflow output')
     parser.add_argument('-c', '--comment', default='',
-                        help='extra comment for tensorboard file name')
+                        help='extra comment for mlflow artiffacts')
     parser.add_argument('-cp', '--checkpoint', default='',
                         help='resume from checkpoint')
 
@@ -49,10 +49,10 @@ def parse_args():
         help="Don't augment training images",
         action="store_true",
     )
-    parser.add_argument(
-        "--log-tensorboard",
-        dest="log_tensorboard",
-        help="Don't record training to tensorboard",
+    parser.add_argument("-log",
+        "--log-mlflow",
+        dest="log_mlflow",
+        help="Record training to mlflow",
         action="store_true",
     )
     parser.add_argument(

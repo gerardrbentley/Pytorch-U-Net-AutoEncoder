@@ -99,27 +99,36 @@ class WNetOutputBlock(nn.Module):
         """
         return self.layers(x)
 
+# TODO: seperable convolutions
 
 class UNetAuto(nn.Module):
     r"""UNet based architecture for image auto encoding"""
 
-    def __init__(self, num_channels: int = 3, num_out_channels: int = 3):
+    def __init__(self, num_channels: int = 3, num_out_channels: int = 3, max_features: int = 1024):
         r"""
         :param num_channels: Number of channels in the raw image data
         :param num_out_channels: Number of channels in the output data
         """
         super(UNetAuto, self).__init__()
-        self.conv_block1 = WNetDownConvBlock(num_channels, 32)
-        self.conv_block2 = WNetDownConvBlock(32, 64)
-        self.conv_block3 = WNetDownConvBlock(64, 128)
-        self.conv_block4 = WNetDownConvBlock(128, 256)
+        if max_features not in [1024, 512, 256]:
+            print('Max features restricted to [1024, 512, 256]')
+            max_features = 1024
+        features_4 = max_features // 2
+        features_3 = features_4 // 2
+        features_2 = features_3 // 2
+        features_1 = features_2 // 2
 
-        self.deconv_block1 = WNetUpConvBlock(256, 512, 256)
-        self.deconv_block2 = WNetUpConvBlock(512, 256, 128)
-        self.deconv_block3 = WNetUpConvBlock(256, 128, 64)
-        self.deconv_block4 = WNetUpConvBlock(128, 64, 32)
+        self.conv_block1 = WNetDownConvBlock(num_channels, features_1)
+        self.conv_block2 = WNetDownConvBlock(features_1, features_2)
+        self.conv_block3 = WNetDownConvBlock(features_2, features_3)
+        self.conv_block4 = WNetDownConvBlock(features_3, features_4)
 
-        self.output_block = WNetOutputBlock(64, num_out_channels)
+        self.deconv_block1 = WNetUpConvBlock(features_4, max_features, features_4)
+        self.deconv_block2 = WNetUpConvBlock(max_features, features_4, features_3)
+        self.deconv_block3 = WNetUpConvBlock(features_4, features_3, features_2)
+        self.deconv_block4 = WNetUpConvBlock(features_3, features_2, features_1)
+
+        self.output_block = WNetOutputBlock(features_2, num_out_channels)
 
     def forward(self, x: Tensor) -> Tensor:
         """Pushes a set of inputs (x) through the network.
@@ -149,13 +158,80 @@ class UNetAuto(nn.Module):
 
         return out
 
+class UNet3Step(nn.Module):
+    r"""Smaller UNet based architecture for image auto encoding"""
+
+    def __init__(self, num_channels: int = 3, num_out_channels: int = 3, max_features: int = 1024):
+        r"""
+        :param num_channels: Number of channels in the raw image data
+        :param num_out_channels: Number of channels in the output data
+        """
+        super(UNet3Step, self).__init__()
+        if max_features not in [1024, 512, 256, 128]:
+            print('Max features restricted to [1024, 512, 256, 128]')
+            max_features = 1024
+        features_3 = max_features // 2
+        features_2 = features_3 // 2
+        features_1 = features_2 // 2
+
+        self.conv_block1 = WNetDownConvBlock(num_channels, features_1)
+        self.conv_block2 = WNetDownConvBlock(features_1, features_2)
+        self.conv_block3 = WNetDownConvBlock(features_2, features_3)
+
+        self.deconv_block1 = WNetUpConvBlock(features_3, max_features, features_3)
+        self.deconv_block2 = WNetUpConvBlock(max_features, features_3, features_2)
+        self.deconv_block3 = WNetUpConvBlock(features_3, features_2, features_1)
+
+        self.output_block = WNetOutputBlock(features_2, num_out_channels)
+
+    def forward(self, x: Tensor) -> Tensor:
+        """Pushes a set of inputs (x) through the network.
+
+        :param x: Input values
+        :return: Network output Tensor
+        """
+        print(f'Block: 0 Curr shape: {x.shape}')
+        x, c1 = self.conv_block1(x)
+        print(f'Block: 1 Out shape: {x.shape}; features shape: {c1.shape}')
+        x, c2 = self.conv_block2(x)
+        print(f'Block: 2 Out shape: {x.shape}; features shape: {c2.shape}')
+        x, c3 = self.conv_block3(x)
+        print(f'Block: 3 Out shape: {x.shape}; features shape: {c3.shape}')
+        d1 = self.deconv_block1(x)
+        print(f'Block: 4 Out shape: {d1.shape}')
+        d2 = self.deconv_block2(torch.cat((c3, d1), dim=1))
+        print(f'Block: 5 Out shape: {d2.shape}')
+        d3 = self.deconv_block3(torch.cat((c2, d2), dim=1))
+        print(f'Block: 6 Out shape: {d3.shape}')
+        out = self.output_block(torch.cat((c1, d3), dim=1))
+        print(f'Block: 7 Out shape: {out.shape}')
+
+        return out
+
+def get_model(string_name):
+    if string_name in ['unet256', 'unet512', 'unet1024']:
+        features = int(string_name[4:])
+    elif string_name in ['smallu128', 'smallu256', 'smallu512', 'smallu1024']:
+        features = int(string_name[6:])
+        return UNet3Step(max_features=features)
+    else:
+        features = 512
+    return UNetAuto(max_features=features)
 
 if __name__ == "__main__":
-    model = UNetAuto()
-    try:
-        from torchsummary import summary
-        summary(model, input_size=(3, 224, 224))
-        print('torchsummary')
-    except:
-        print(model)
-        print('no torchsummary found: pip install torchsummary')
+    models = ['unet256', 'unet512', 'unet1024', 'smallu128', 'smallu256', 'smallu512', 'smallu1024']
+    for name in models:
+        model = get_model(name) 
+        print(f'Model: {name}')
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+            model.to('cuda')
+        try:
+            from torchsummary import summary
+            summary(model, input_size=(3, 224, 256))
+            print('torchsummary')
+        except:
+            print(model)
+            print('torchsummary failed: pip install torchsummary or bad input')
+        del model
+    print(f"tested {len(models)} model types: {models}")
