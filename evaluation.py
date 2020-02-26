@@ -42,7 +42,7 @@ def evaluate(model, criterion, data_loader, device, print_freq, start_step=0, do
                 # TODO: write function to visualize mask and output in eval loop
                 if i < 5:
                     reconstruction = TT.img_norm(output)
-                    training_images = [image, target, reconstruction]
+                    training_images = [image, reconstruction, target]
 
                     img_grid = torchvision.utils.make_grid(
                         torch.cat(training_images), nrow=3, normalize=True)

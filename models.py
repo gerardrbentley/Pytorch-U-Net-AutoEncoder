@@ -190,21 +190,21 @@ class UNet3Step(nn.Module):
         :param x: Input values
         :return: Network output Tensor
         """
-        print(f'Block: 0 Curr shape: {x.shape}')
+        # print(f'Block: 0 Curr shape: {x.shape}')
         x, c1 = self.conv_block1(x)
-        print(f'Block: 1 Out shape: {x.shape}; features shape: {c1.shape}')
+        # print(f'Block: 1 Out shape: {x.shape}; features shape: {c1.shape}')
         x, c2 = self.conv_block2(x)
-        print(f'Block: 2 Out shape: {x.shape}; features shape: {c2.shape}')
+        # print(f'Block: 2 Out shape: {x.shape}; features shape: {c2.shape}')
         x, c3 = self.conv_block3(x)
-        print(f'Block: 3 Out shape: {x.shape}; features shape: {c3.shape}')
+        # print(f'Block: 3 Out shape: {x.shape}; features shape: {c3.shape}')
         d1 = self.deconv_block1(x)
-        print(f'Block: 4 Out shape: {d1.shape}')
+        # print(f'Block: 4 Out shape: {d1.shape}')
         d2 = self.deconv_block2(torch.cat((c3, d1), dim=1))
-        print(f'Block: 5 Out shape: {d2.shape}')
+        # print(f'Block: 5 Out shape: {d2.shape}')
         d3 = self.deconv_block3(torch.cat((c2, d2), dim=1))
-        print(f'Block: 6 Out shape: {d3.shape}')
+        # print(f'Block: 6 Out shape: {d3.shape}')
         out = self.output_block(torch.cat((c1, d3), dim=1))
-        print(f'Block: 7 Out shape: {out.shape}')
+        # print(f'Block: 7 Out shape: {out.shape}')
 
         return out
 

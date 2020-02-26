@@ -147,8 +147,11 @@ def img_norm(image):
     return image
 
 # TODO verify these normalizations work well for pixelated games
-DEFAULT_MEAN = [0.485, 0.456, 0.406]
-DEFAULT_STD = [0.229, 0.224, 0.225]
+# DEFAULT_MEAN = [0.485, 0.456, 0.406]
+# DEFAULT_STD = [0.229, 0.224, 0.225]
+# Mario Image Mean and Std
+DEFAULT_MEAN = [0.607, 0.607, 0.607]
+DEFAULT_STD = [0.306, 0.306, 0.306]
 def get_transform(train):
     base_size = 224
     crop_size = 180

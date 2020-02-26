@@ -128,8 +128,8 @@ def main(args):
                     if p.requires_grad]},
     ]
 
-    if args.distributed:
-        args.lr = args.lr * args.world_size
+    # if args.distributed:
+    #     args.lr = args.lr * args.world_size
 
     loss_fn = nn.MSELoss()
 
