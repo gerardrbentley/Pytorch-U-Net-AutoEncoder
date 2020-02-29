@@ -17,8 +17,7 @@ from torch.utils.data import DataLoader
 from torch.utils.data.distributed import DistributedSampler
 from torchvision.datasets import MNIST
 
-from pytorch_lightning.core import LightningModule
-from pytorch_lightning.core import data_loader
+import pytorch_lightning as pl
 
 # import mlflow
 # import mlflow.pytorch
@@ -34,7 +33,7 @@ from models import get_model
 from datasets import GameImagesDataset, GameFoldersDataset, OverfitDataset, get_dataset
 
 
-class UnetLightning(LightningModule):
+class UnetLightning(pl.LightningModule):
     """
     Unet Auto Encoder models with pytorch lightning
     """
