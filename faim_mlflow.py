@@ -11,6 +11,16 @@ def get_run_manager(args):
     if not args.log_mlflow:
         return nullcontext()
     
+    if 'MLFLOW_TRACKING_URI' in os.environ:
+        print(f"Mlflow TRACKING URI in env: {os.environ['MLFLOW_TRACKING_URI']}")
+    else:
+        print(f"no tracking uri, defaulting to local, set with MLFLOW_TRACKING_URI env variable")
+        
+    if 'MLFLOW_TRACKING_USERNAME' in os.environ and 'MLFLOW_TRACKING_PASSWORD' in os.environ:
+        print(f"Mlflow User and Pass in env: {os.environ['MLFLOW_TRACKING_USERNAME']}")
+    else:
+        print("Need 'MLFLOW_TRACKING_USERNAME' and 'MLFLOW_TRACKING_PASSWORD' in os.environment if logging remotely")
+
     # Unsure when this will hit
     current_run = mlflow.active_run()
     if current_run is not None:

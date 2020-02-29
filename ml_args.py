@@ -1,7 +1,7 @@
 import argparse
 
 
-def parse_args():
+def parse_args(get_parser=False):
     parser = argparse.ArgumentParser(
         description='Game Image AutoEncoder Training')
 
@@ -11,6 +11,8 @@ def parse_args():
     parser.add_argument('--device', default='cuda', help='device')
     parser.add_argument('-j', '--workers', default=16, type=int, metavar='N',
                         help='number of data loading workers (default: 16)')
+    parser.add_argument('--gpus', default='', type=str,
+                        help='comma seperated indexes of gpus to use in training')
 
     # Hyper Parameters
     parser.add_argument('-b', '--batch-size', default=8, type=int)
@@ -50,11 +52,11 @@ def parse_args():
         action="store_true",
     )
     parser.add_argument("-log",
-        "--log-mlflow",
-        dest="log_mlflow",
-        help="Record training to mlflow",
-        action="store_true",
-    )
+                        "--log-mlflow",
+                        dest="log_mlflow",
+                        help="Record training to mlflow",
+                        action="store_true",
+                        )
     parser.add_argument(
         "--visualize",
         dest="do_visualize",
@@ -73,6 +75,7 @@ def parse_args():
                         help='number of distributed processes')
     parser.add_argument('--dist-url', default='env://',
                         help='url used to set up distributed training')
-
+    if get_parser:
+        return parser
     args = parser.parse_args()
     return args

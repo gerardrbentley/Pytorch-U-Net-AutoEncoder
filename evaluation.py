@@ -27,7 +27,7 @@ def evaluate(model, criterion, data_loader, device, print_freq, start_step=0, do
 
             step = start_step + i
 
-            image, target = data['image'], data['target']
+            image, target = data.image, data.target
             image, target = image.to(device), target.to(device)
             output = model(image)
             total_loss = criterion(output, target)
@@ -38,11 +38,11 @@ def evaluate(model, criterion, data_loader, device, print_freq, start_step=0, do
             if do_logging:
                 mlflow.log_metric('Loss_Total/Validation',
                                   loss_item, step=step)
-                
+
                 # TODO: write function to visualize mask and output in eval loop
                 if i < 5:
                     reconstruction = TT.img_norm(output)
-                    training_images = [image, target, reconstruction]
+                    training_images = [image, reconstruction, target]
 
                     img_grid = torchvision.utils.make_grid(
                         torch.cat(training_images), nrow=3, normalize=True)
@@ -50,7 +50,7 @@ def evaluate(model, criterion, data_loader, device, print_freq, start_step=0, do
                     pil_input, _ = TT.ToPIL()(img_grid.cpu(), img_grid.cpu())
 
                     filename = f"globalstep_{step:05d}_image_{i}_"
-                    with tempfile.NamedTemporaryFile(prefix=filename,suffix='.png') as filepath:
+                    with tempfile.NamedTemporaryFile(prefix=filename, suffix='.png') as filepath:
                         pil_input.save(filepath)
                         mlflow.log_artifact(filepath.name, 'eval_images')
 
@@ -125,7 +125,7 @@ def main(args):
     run_manager = get_run_manager(args)
     with run_manager as run:
         eval_result = evaluate(model, nn.MSELoss(), data_loader_test, device,
-                            1, epoch=0, writer=writer, post_visualize=args.do_visualize)
+                               1, epoch=0, writer=writer, post_visualize=args.do_visualize)
         print(eval_result)
     return 1
 

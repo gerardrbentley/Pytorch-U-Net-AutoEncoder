@@ -34,7 +34,7 @@ def train_one_epoch(model, criterion, data_loader, device, optimizer, lr_schedul
     for data, i in metric_logger.log_every(data_loader, print_freq, header):
         step = epoch * (len(data_loader.dataset) // data_loader.batch_size) + i
 
-        image, target = data['image'], data['target']
+        image, target = data.image, data.target
         image, target = image.to(device), target.to(device)
         output = model(image)
         total_loss = criterion(output, target)
@@ -47,7 +47,8 @@ def train_one_epoch(model, criterion, data_loader, device, optimizer, lr_schedul
         metric_logger.update(total_loss=total_loss.item(),
                              lr=optimizer.param_groups[0]["lr"])
         if do_logging and step % print_freq == 0:
-            print(f"epoch: {epoch}, i: {i}, step: {step}, data: {len(data_loader.dataset)}, base: {epoch * len(data_loader.dataset)}")
+            print(
+                f"epoch: {epoch}, i: {i}, step: {step}, data: {len(data_loader.dataset)}, base: {epoch * len(data_loader.dataset)}")
             mlflow.log_metric('Loss_Sum/Training',
                               total_loss.item(), step=step)
             mlflow.log_metric(
@@ -128,8 +129,8 @@ def main(args):
                     if p.requires_grad]},
     ]
 
-    if args.distributed:
-        args.lr = args.lr * args.world_size
+    # if args.distributed:
+    #     args.lr = args.lr * args.world_size
 
     loss_fn = nn.MSELoss()
 
@@ -153,7 +154,7 @@ def main(args):
         train_images = []
         for idx in rand_select:
             data = dataset[idx]
-            image, target = data['image'], data['target']
+            image, target = data.image, data.target
 
             train_images.append(image)
             train_images.append(target)
@@ -177,7 +178,8 @@ def main(args):
             train_one_epoch(model, loss_fn, data_loader, device,
                             optimizer, lr_scheduler, epoch, args.print_freq, args.log_mlflow)
             if data_loader_test is not None:
-                curr_step = (epoch+1) * (len(data_loader.dataset) // data_loader.batch_size)
+                curr_step = (epoch+1) * (len(data_loader.dataset) //
+                                         data_loader.batch_size)
                 result_metric_logger = evaluate(
                     model, loss_fn, data_loader_test, device, args.print_freq, curr_step, args.log_mlflow, post_visualize=visualize_flag)
             else:
