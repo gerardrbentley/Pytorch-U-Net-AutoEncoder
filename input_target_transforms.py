@@ -10,6 +10,7 @@ from torchvision.transforms import functional as F
 
 # For Use with PIL Image Input and Target (ex. Auto Encoder)
 
+
 class Compose(object):
     def __init__(self, transforms):
         self.transforms = transforms
@@ -19,6 +20,7 @@ class Compose(object):
             image, target = t(image, target)
         return image, target
 
+
 class Resize(object):
     def __init__(self, size):
         self.size = size
@@ -27,6 +29,7 @@ class Resize(object):
         image = F.resize(image, self.size)
         target = F.resize(target, self.size)
         return image, target
+
 
 class RandomResize(object):
     def __init__(self, min_size, max_size=None):
@@ -52,6 +55,7 @@ class RandomHorizontalFlip(object):
             target = F.hflip(target)
         return image, target
 
+
 class RandomVerticalFlip(object):
     def __init__(self, flip_prob):
         self.flip_prob = flip_prob
@@ -61,6 +65,7 @@ class RandomVerticalFlip(object):
             image = F.vflip(image)
             target = F.vflip(target)
         return image, target
+
 
 class RandomCrop(object):
     def __init__(self, size, padding=None, pad_if_needed=True, fill=0, padding_mode='constant'):
@@ -88,12 +93,16 @@ class RandomCrop(object):
 
         # pad the width if needed
         if self.pad_if_needed and img.size[0] < self.size[1]:
-            img = F.pad(img, (self.size[1] - img.size[0], 0), self.fill, self.padding_mode)
-            target = F.pad(target, (self.size[1] - target.size[0], 0), self.fill, self.padding_mode)
+            img = F.pad(
+                img, (self.size[1] - img.size[0], 0), self.fill, self.padding_mode)
+            target = F.pad(
+                target, (self.size[1] - target.size[0], 0), self.fill, self.padding_mode)
         # pad the height if needed
         if self.pad_if_needed and img.size[1] < self.size[0]:
-            img = F.pad(img, (0, self.size[0] - img.size[1]), self.fill, self.padding_mode)
-            target = F.pad(target, (0, self.size[0] - target.size[1]), self.fill, self.padding_mode)
+            img = F.pad(
+                img, (0, self.size[0] - img.size[1]), self.fill, self.padding_mode)
+            target = F.pad(
+                target, (0, self.size[0] - target.size[1]), self.fill, self.padding_mode)
 
         i, j, h, w = T.RandomCrop.get_params(img, self.size)
 
@@ -116,11 +125,13 @@ class ToTensor(object):
         target = F.to_tensor(target)
         return image, target
 
+
 class ToPIL(object):
     def __call__(self, image, target):
         image = F.to_pil_image(image)
         target = F.to_pil_image(target)
         return image, target
+
 
 class Normalize(object):
     def __init__(self, mean, std):
@@ -132,8 +143,10 @@ class Normalize(object):
         target = F.normalize(target, mean=self.mean, std=self.std)
         return image, target
 
+
 def img_norm(image):
     image = image.clone()
+
     def norm_ip(img, min, max):
         img.clamp_(min=min, max=max)
         img.add_(-min).div_(max - min + 1e-5)
@@ -146,13 +159,17 @@ def img_norm(image):
     norm_range(image, None)
     return image
 
+
 # TODO verify these normalizations work well for pixelated games
+# TODO Denoising autoencoder
 # DEFAULT_MEAN = [0.485, 0.456, 0.406]
 # DEFAULT_STD = [0.229, 0.224, 0.225]
 # Mario Image Mean and Std
 DEFAULT_MEAN = [0.607, 0.607, 0.607]
 DEFAULT_STD = [0.306, 0.306, 0.306]
-def get_transform(train):
+
+
+def get_transform(train=False, inpaint=False, noise=False):
     base_size = 224
     crop_size = 180
 
@@ -162,15 +179,18 @@ def get_transform(train):
         max_size = int(2.5 * base_size)
 
         transforms.append(RandomResize(base_size, max_size))
-        
+
         transforms.append(RandomHorizontalFlip(0.5))
         transforms.append(RandomVerticalFlip(0.5))
 
         transforms.append(RandomCrop(crop_size))
 
     transforms.append(Resize(base_size))
+    if inpaint:
+        # TODO get inpainting cutout transform
+        pass
     transforms.append(ToTensor())
     transforms.append(Normalize(mean=DEFAULT_MEAN,
-                                  std=DEFAULT_STD))
+                                std=DEFAULT_STD))
 
     return Compose(transforms)
