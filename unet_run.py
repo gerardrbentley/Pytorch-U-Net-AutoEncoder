@@ -17,8 +17,7 @@ from torch.utils.data import DataLoader
 from torch.utils.data.distributed import DistributedSampler
 from torchvision.datasets import MNIST
 
-from pytorch_lightning.core import LightningModule
-from pytorch_lightning.core import data_loader
+import pytorch_lightning as pl
 
 # import mlflow
 # import mlflow.pytorch
@@ -28,13 +27,12 @@ import distributed_utils
 
 # from faim_mlflow import get_run_manager
 from ml_args import parse_args
-from evaluation import evaluate
 from models import get_model
 
 from datasets import GameImagesDataset, GameFoldersDataset, OverfitDataset, get_dataset
 
 
-class UnetLightning(LightningModule):
+class UnetLightning(pl.LightningModule):
     """
     Unet Auto Encoder models with pytorch lightning
     """
@@ -45,16 +43,14 @@ class UnetLightning(LightningModule):
         :param hparams:
         """
         # init superclass
-        super(LightningTemplateModel, self).__init__()
+        super(UnetLightning, self).__init__()
         self.hparams = hparams
 
         self.batch_size = hparams.batch_size
 
-        # if you specify an example input, the summary will show input/output for each layer
-        self.example_input_array = torch.rand((3, 224, 256))
         self.dataset = None
         # build model
-        self.net = get_model(hparams.model_name)
+        self.net = get_model(hparams.model)
     # ---------------------
     # TRAINING
     # ---------------------
@@ -87,7 +83,12 @@ class UnetLightning(LightningModule):
         predictions = self.forward(images)
         # calculate loss
         loss_val = self.loss(targets, predictions)
-        return {'train_loss': loss_val}
+
+        output = {
+            'loss': loss_val,  # required
+            'progress_bar': {'training_loss': loss_val},
+        }
+        return output
 
     def validation_step(self, batch, batch_idx):
         """
@@ -129,22 +130,37 @@ class UnetLightning(LightningModule):
         #     lambda x: (1 - x / (len(self.train_dataloader()) * args.epochs)) ** 0.9)
         return [optimizer], [scheduler]
 
-    def load_full_dataset(self, split):
+    def load_full_dataset(self):
         if self.dataset is None:
+            train_transform = (TT.get_transform(
+                train=True, inpaint=False, noise=False))
+            val_transform = (TT.get_transform(
+                train=False, inpaint=False, noise=False))
             self.dataset = get_dataset(
-                self.hparams.dataset, 'train', transform=None)
+                self.hparams.dataset, 'train', transform=train_transform)
+
+            self.val_dataset = get_dataset(
+                self.hparams.dataset, 'val', transform=val_transform)
+
             num_samples = len(self.dataset)
             num_train = int(0.8 * num_samples)
+            indices = torch.randperm(num_samples).tolist()
+            self.dataset = torch.utils.data.Subset(
+                self.dataset, indices[0:num_train])
+            self.val_dataset = torch.utils.data.Subset(
+                self.val_dataset, indices[num_train:])
             log.info(f'Full Dataset loaded: len: {num_samples}')
-            self.train_split, self.val_split = torch.utils.data.random_split(
-                self.dataset, (num_train, num_samples - num_train))
+            # self.train_split, self.val_split = torch.utils.data.random_split(
+            #     self.dataset, (num_train, num_samples - num_train))
             log.info(
-                f'Train {len(self.train_split)} and Val {len(self.val_split)} splits made')
+                f'Train {len(self.dataset)} and Val {len(self.val_dataset)} splits made')
 
-            self.train_split.transform = TT.get_transform(
-                train=True, inpaint=False, noise=False)
-            self.val_split.transform = TT.get_transform(
-                train=False, inpaint=False, noise=False)
+            # print(self.train_split.transform)
+            # print(self.val_split.transform)
+            # x, y = self.train_split[0]
+            # print(type(x), type(y))
+            # z, p = self.train_split.transform(x, y)
+            # print(type(z), type(p))
 
     @pl.data_loader
     def train_dataloader(self):
@@ -153,13 +169,13 @@ class UnetLightning(LightningModule):
         """
         log.info('Training data loader called.')
         self.load_full_dataset()
-        return torch.utils.data.DataLoader(self.train_split, batch_size=self.hparams.batch_size, drop_last=True)
+        return torch.utils.data.DataLoader(self.dataset, batch_size=self.hparams.batch_size, drop_last=True)
 
     @pl.data_loader
     def val_dataloader(self):
         log.info('Validation data loader called.')
         self.load_full_dataset()
-        return torch.utils.data.DataLoader(self.val_split, batch_size=self.hparams.batch_size, drop_last=False)
+        return torch.utils.data.DataLoader(self.val_dataset, batch_size=self.hparams.batch_size, drop_last=False)
 
     # @pl.data_loader
     # def test_dataloader(self):
@@ -172,10 +188,10 @@ def main(args):
     model = UnetLightning(args)
 
     # most basic trainer, uses good defaults
-    trainer = Trainer(
+    trainer = pl.Trainer(
         max_nb_epochs=args.epochs,
-        gpus=args.gpus,
-        nb_gpu_nodes=args.world_size,
+        gpus=None if args.gpus == '' else args.gpus,
+        num_nodes=args.world_size,
     )
     trainer.fit(model)
 

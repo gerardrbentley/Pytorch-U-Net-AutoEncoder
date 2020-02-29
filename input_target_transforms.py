@@ -186,9 +186,8 @@ def get_transform(train=False, inpaint=False, noise=False):
         transforms.append(RandomCrop(crop_size))
 
     transforms.append(Resize(base_size))
-    if inpaint:
-        # TODO get inpainting cutout transform
-        pass
+    # TODO get inpainting cutout transform
+
     transforms.append(ToTensor())
     transforms.append(Normalize(mean=DEFAULT_MEAN,
                                 std=DEFAULT_STD))

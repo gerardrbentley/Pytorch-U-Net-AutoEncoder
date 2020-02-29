@@ -26,9 +26,6 @@ class GameImagesDataset(torch.utils.data.Dataset):
         self.length = len(self.image_list)
         self.transform = transform
 
-    def set_transform(transform=None):
-        self.trans
-
     def __len__(self):
         return self.length
 
@@ -83,8 +80,10 @@ class OverfitDataset(torch.utils.data.Dataset):
         image = Image.open(self.image_file).convert('RGB')
 
         target = image.copy()
-
+        # print('CALL GET')
+        # print(self.transform)
         if self.transform:
+            # print('CALL TRANSFORM')
             image, target = self.transform(image, target)
 
         # sample = {'image': image, 'target': target}
